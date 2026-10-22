@@ -16,6 +16,9 @@ if !errorlevel! neq 0 GOTO ERROR
 ECHO Compiling AsterScan updater ...
 %PYI% asterscan-updater.spec
 if !errorlevel! neq 0 GOTO ERROR
+ECHO Compiling AsterScan Studio ...
+%PYI% asterscan-studio.spec
+if !errorlevel! neq 0 GOTO ERROR
 
 :: Copy Executables and other files to the package folder
 mkdir "%PACKAGE%"
@@ -23,6 +26,8 @@ if !errorlevel! neq 0 GOTO ERROR
 copy /Y ".\dist\asterscan.exe" "%PACKAGE%\"
 if !errorlevel! neq 0 GOTO ERROR
 copy /Y ".\dist\asterscan-updater.exe" "%PACKAGE%\"
+if !errorlevel! neq 0 GOTO ERROR
+copy /Y ".\dist\asterscan-studio.exe" "%PACKAGE%\"
 if !errorlevel! neq 0 GOTO ERROR
 mkdir "%PACKAGE%\tools"
 if !errorlevel! neq 0 GOTO ERROR

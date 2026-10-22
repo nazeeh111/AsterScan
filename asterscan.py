@@ -34,13 +34,14 @@ import psutil
 import platform
 import signal as signal_module
 from sys import platform as _platform
-from subprocess import Popen
+from subprocess import Popen, PIPE, STDOUT
 from collections import Counter
 import datetime
 from bisect import bisect_left
 
 # LOKI Modules
 from lib.lokilogger import *
+from lib.reporting import report_payload, write_report
 from lib.levenshtein import LevCheck
 
 from lib.helpers import *
@@ -127,6 +128,9 @@ class Loki(object):
 
         # Scan Mode
         self.intense_mode = intense_mode
+        self.files_seen = 0
+        self.contents_inspected = 0
+        self.paths_processed = 0
 
         # Get application path
         self.app_path = get_application_path()
@@ -246,6 +250,7 @@ class Loki(object):
                 try:
                     # Findings
                     reasons = []
+                    file_hashes = {}
                     # Total Score
                     total_score = 0
 
@@ -296,6 +301,7 @@ class Loki(object):
 
                     # Counter
                     c += 1
+                    self.files_seen += 1
 
                     if not args.noindicator:
                         printProgress(c)
@@ -386,6 +392,7 @@ class Loki(object):
                         fileData = self.get_file_data(filePath)
                         if fileData is None:
                             continue
+                        self.contents_inspected += 1
 
                         # First bytes
                         firstBytesString = "%s / %s" % (fileData[:20].hex(), removeNonAsciiDrop(fileData[:20]))
@@ -399,6 +406,7 @@ class Loki(object):
                         sha256 = 0
 
                         md5, sha1, sha256 = generateHashes(fileData)
+                        file_hashes = {'md5': md5, 'sha1': sha1, 'sha256': sha256}
                         md5_num=int(md5, 16)
                         sha1_num=int(sha1, 16)
                         sha256_num=int(sha256, 16)
@@ -499,13 +507,18 @@ class Loki(object):
                         if i < 2 or args.allreasons:
                             message_body += "REASON_{0}: {1}".format(i+1, r)
 
-                    logger.log(message_type, "FileScan", message_body)
+                    logger.log(message_type, "FileScan", message_body, data={
+                        'kind': 'file', 'path': filePath, 'score': total_score,
+                        'file_type': fileType, 'size': fileSize,
+                        'hashes': file_hashes, 'reasons': reasons,
+                    })
 
                 except Exception as exc:
                     if logger.debug:
                         traceback.print_exc()
                     logger.log("ERROR", "FileScan", "Could not scan %s: %s" % (filePath, exc))
 
+        self.paths_processed += 1
         return True
 
     def scan_data(self, fileData, fileType="-", fileName=b"-", filePath=b"-", extension=b"-", md5="-"):
@@ -944,13 +957,13 @@ class Loki(object):
 
         logger.log("INFO", "Rootkit", "Checking for Backdoors ...")
 
-        dp = DoublePulsar(ip="127.0.0.1", timeout=None, verbose=args.debug)
+        dp = DoublePulsar(ip="127.0.0.1", timeout=None, verbose=args.debug and not args.jsonl)
 
         logger.log("INFO", "Rootkit", "Checking for Double Pulsar RDP Backdoor")
         try:
             dp_rdp_result, message = dp.check_ip_rdp()
             if dp_rdp_result:
-                logger.log("ALERT", message)
+                logger.log("ALERT", "Rootkit", message)
             else:
                 logger.log("INFO", "Rootkit", "Double Pulsar RDP check RESULT: %s" % message)
         except Exception:
@@ -962,7 +975,7 @@ class Loki(object):
         try:
             dp_smb_result, message = dp.check_ip_smb()
             if dp_smb_result:
-                logger.log("ALERT", message)
+                logger.log("ALERT", "Rootkit", message)
             else:
                 logger.log("INFO", "Rootkit", "Double Pulsar SMB check RESULT: %s" % message)
         except Exception:
@@ -1404,7 +1417,7 @@ def get_application_path():
         #    logger.log("DEBUG", "Init", "Application Path: %s" % application_path)
         return application_path
     except Exception:
-        print("Error while evaluation of application path")
+        print("Error while evaluation of application path", file=sys.stderr)
         traceback.print_exc()
         if args.debug:
             sys.exit(1)
@@ -1447,7 +1460,12 @@ def updateLoki(sigsOnly):
     if args.debug:
         pArgs.append('--debug')
     try:
-        p = Popen(pArgs, shell=False)
+        if args.jsonl:
+            p = Popen(pArgs, shell=False, stdout=PIPE, stderr=STDOUT, text=True, errors='replace')
+            for line in p.stdout:
+                logger.log('INFO', 'Update', line.rstrip('\r\n'))
+        else:
+            p = Popen(pArgs, shell=False)
         return p.wait() == 0
     except OSError as exc:
         logger.log("ERROR", "Update", "Cannot start updater: %s" % exc)
@@ -1460,12 +1478,12 @@ def walk_error(err):
 
 # CTRL+C Handler --------------------------------------------------------------
 def signal_handler(signal_name, frame):
-    try:
-        print("------------------------------------------------------------------------------\n")
-        logger.log('INFO', 'Init', 'AsterScan was interrupted by the user.')
-    except Exception:
-        print('AsterScan was interrupted by the user.')
-    sys.exit(0)
+    current_logger = globals().get('logger')
+    if current_logger is not None:
+        current_logger.log('ERROR', 'Init', 'AsterScan was interrupted; scan incomplete.')
+    else:
+        print('AsterScan was interrupted before scanning began.', file=sys.stderr)
+    sys.exit(130)
 
 def main():
     """
@@ -1497,6 +1515,8 @@ def main():
     parser.add_argument('--dontwait', action='store_true', help='Do not wait on exit', default=False)
     parser.add_argument('--intense', action='store_true', help='Intense scan mode (also scan unknown file types and all extensions)', default=False)
     parser.add_argument('--csv', action='store_true', help='Write CSV log format to STDOUT (machine processing)', default=False)
+    parser.add_argument('--jsonl', action='store_true', help='Write structured JSON Lines events to STDOUT', default=False)
+    parser.add_argument('--report', metavar='html-file', help='Write an interactive HTML scan report')
     parser.add_argument('--onlyrelevant', action='store_true', help='Only print warnings or alerts', default=False)
     parser.add_argument('--nolog', action='store_true', help='Don\'t write a local log file', default=False)
     parser.add_argument('--update', action='store_true', default=False, help='Update the signatures from the "signature-base" sub repository')
@@ -1514,6 +1534,15 @@ def main():
     parser.add_argument('--version', action='store_true', help='Show AsterScan version and exit', default=False)
 
     args = parser.parse_args()
+
+    if args.jsonl and args.csv:
+        parser.error('--jsonl and --csv cannot be used together')
+    if args.jsonl:
+        args.noindicator = True
+    if args.report and (args.update or args.version):
+        parser.error('--report requires a scan, not --update or --version')
+    if args.report and os.path.exists(args.report):
+        parser.error('report already exists: %s' % args.report)
 
     if args.s <= 0 or not (0 <= args.n <= args.w <= args.a):
         parser.error('file size must be positive and scores must satisfy 0 <= notice <= warning <= alert')
@@ -1560,7 +1589,8 @@ if __name__ == '__main__':
     # Logger
     LokiCustomFormatter = None
     logger = LokiLogger(args.nolog, args.l, getHostname(os_platform), args.r, int(args.t), args.syslogtcp, args.csv, args.onlyrelevant, args.debug,
-                        platform=os_platform, caller='main', customformatter=LokiCustomFormatter)
+                        platform=os_platform, caller='main', customformatter=LokiCustomFormatter,
+                        jsonl=args.jsonl, capture_report=bool(args.report))
 
     # Show version
     if args.version:
@@ -1606,6 +1636,7 @@ if __name__ == '__main__':
 
     # Scan Processes --------------------------------------------------
     scans_run = False
+    report_target = 'Processes' if args.nofilescan else args.p
     if not args.noprocscan and os_platform == "windows":
         if isAdmin:
             loki.scan_processes(args.nopesieve, args.nolisten, args.excludeprocess, args.pesieveshellc)
@@ -1619,6 +1650,7 @@ if __name__ == '__main__':
         defaultPath = args.p
         if (os_platform == "linux" or os_platform == "macos") and args.p == "C:\\":
             defaultPath = "/"
+        report_target = 'All drives' if args.alldrives else 'Fixed drives' if args.allhds else defaultPath
 
         # Drives evaluation
         if os_platform == "windows":
@@ -1641,6 +1673,10 @@ if __name__ == '__main__':
            scans_run = loki.scan_path(defaultPath) or scans_run
 
     # Result ----------------------------------------------------------
+    coverage = {'kind': 'coverage', 'paths_processed': loki.paths_processed,
+                'files_seen': loki.files_seen, 'contents_inspected': loki.contents_inspected}
+    logger.log("INFO", "Coverage", "Files seen: %s; contents inspected: %s" %
+               (loki.files_seen, loki.contents_inspected), data=coverage)
     logger.log("NOTICE", "Results", "Results: {0} alerts, {1} warnings, {2} notices".format(logger.alerts, logger.warnings, logger.notices))
     if not scans_run or logger.errors:
         reason = "no scan target was processed" if not scans_run else "%s errors occurred" % logger.errors
@@ -1656,5 +1692,13 @@ if __name__ == '__main__':
 
     logger.log("INFO", "Results", "Report signature false positives to the rule set's source repository.")
     logger.log("NOTICE", "Results", "Finished AsterScan SYSTEM: %s TIME: %s" % (getHostname(os_platform), getSyslogTimestamp()))
+
+    if args.report:
+        try:
+            write_report(args.report, report_payload(logger, report_target, args.intense, scans_run,
+                                                    get_application_path(), coverage), get_application_path())
+            logger.log("INFO", "Report", "Wrote HTML report: %s" % args.report)
+        except Exception as exc:
+            logger.log("ERROR", "Report", "Could not write HTML report %s: %s" % (args.report, exc))
 
     sys.exit(2 if not scans_run or logger.errors else 0)

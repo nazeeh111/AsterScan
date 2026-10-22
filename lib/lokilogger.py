@@ -13,6 +13,7 @@ import rfc5424logging
 import logging
 from logging import handlers
 import socket
+import json
 
 __version__ = '0.51.1'
 
@@ -39,7 +40,7 @@ class LokiLogger:
     debug = False
     linesep = "\n"
 
-    def __init__(self, no_log_file, log_file, hostname, remote_host, remote_port, syslog_tcp, csv, only_relevant, debug, platform, caller, customformatter=None):
+    def __init__(self, no_log_file, log_file, hostname, remote_host, remote_port, syslog_tcp, csv, only_relevant, debug, platform, caller, customformatter=None, jsonl=False, capture_report=False):
         self.version = __version__
         self.alerts = 0
         self.warnings = 0
@@ -52,6 +53,12 @@ class LokiLogger:
         self.csv = csv
         self.only_relevant = only_relevant
         self.debug = debug
+        self.jsonl = jsonl
+        self.capture_report = capture_report
+        self.report_events = []
+        self.report_dropped = 0
+        self.report_routine_count = 0
+        self.remote_logging = False
         self.caller = caller
         self.CustomFormatter = customformatter
         if "windows" in platform.lower():
@@ -61,7 +68,7 @@ class LokiLogger:
         init()
 
         # Welcome
-        if not self.csv:
+        if not self.csv and not self.jsonl:
             self.print_welcome()
 
         # Syslog server target
@@ -80,7 +87,7 @@ class LokiLogger:
                 print('Failed to create remote logger: ' + str(e))
                 sys.exit(1)
 
-    def log(self, mes_type, module, message):
+    def log(self, mes_type, module, message, data=None):
 
         if not self.debug and mes_type == "DEBUG":
             return
@@ -96,6 +103,27 @@ class LokiLogger:
             self.errors += 1
         self.messagecount += 1
 
+        event = None
+        if self.jsonl or self.capture_report:
+            event = {
+                'time': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                'level': mes_type,
+                'module': module,
+                'message': str(message),
+            }
+            if data is not None:
+                event['data'] = data
+        if self.capture_report and mes_type in ('ALERT', 'WARNING', 'NOTICE', 'ERROR', 'RESULT'):
+            important = mes_type in ('ALERT', 'WARNING', 'ERROR', 'RESULT') or \
+                (mes_type == 'NOTICE' and data is not None and data.get('kind') == 'file')
+            if important:
+                self.report_events.append(event)
+            elif self.report_routine_count < 2000:
+                self.report_events.append(event)
+                self.report_routine_count += 1
+            else:
+                self.report_dropped += 1
+
         if self.only_relevant:
             if mes_type not in ('ALERT', 'WARNING', 'ERROR') and not (mes_type == 'RESULT' and message.startswith('SCAN INCOMPLETE')):
                 return
@@ -105,11 +133,14 @@ class LokiLogger:
             self.log_to_file(message, mes_type, module)
 
         # to stdout
-        try:
-            self.log_to_stdout(message, mes_type)
-        except Exception:
-            print ("Cannot print certain characters to command line - see log file for full unicode encoded log line")
-            self.log_to_stdout(message, mes_type)
+        if self.jsonl:
+            print(json.dumps(event, ensure_ascii=False, default=str), flush=True)
+        else:
+            try:
+                self.log_to_stdout(message, mes_type)
+            except Exception:
+                print ("Cannot print certain characters to command line - see log file for full unicode encoded log line")
+                self.log_to_stdout(message, mes_type)
 
         # to syslog server
         if self.remote_logging:
@@ -253,6 +284,6 @@ class LokiLogger:
 
 
 def getSyslogTimestamp():
-    date_obj = datetime.datetime.utcnow()
+    date_obj = datetime.datetime.now(datetime.timezone.utc)
     date_str = date_obj.strftime("%Y%m%dT%H:%M:%SZ")
     return date_str

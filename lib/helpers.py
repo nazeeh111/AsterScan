@@ -244,7 +244,7 @@ def runProcess(command, timeout=10):
         def _kill_process_after_a_timeout(pid):
             os.kill(pid, signal.SIGTERM)
             kill_check.set() # tell the main routine that we had to kill
-            print("timeout hit - killing pid {0}".format(pid))
+            print("timeout hit - killing pid {0}".format(pid), file=sys.stderr)
             # use SIGKILL if hard to kill...
             return "", 1
         try:
