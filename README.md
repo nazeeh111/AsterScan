@@ -2,7 +2,7 @@
 
 <p align="center"><strong>Inspect files and, on Windows, processes for known indicators of compromise.</strong></p>
 
-> **Origin and status:** AsterScan is a rebranded fork of [LOKI by Florian Roth](https://github.com/Neo23x0/Loki), based on upstream commit [`7688421`](https://github.com/Neo23x0/Loki/commit/7688421a7094e95453802d97484f2a0b8694a664). It is not an official Nextron Systems release or a new detection engine. Upstream has [deprecated the Python scanner](https://github.com/Neo23x0/Loki#readme). This fork retains the upstream scan logic and GPL license. There is no AsterScan binary release or independent security audit yet.
+**AsterScan** combines command-line IOC and YARA scanning with a local desktop workspace and offline investigation reports. It is GPL-licensed and runs without a cloud account.
 
 ## What it scans
 
@@ -13,7 +13,7 @@
 | YARA rules against files | Yes | Yes |
 | Process memory, connections, and Windows-specific checks | Yes, with the required privileges | No |
 
-The scanner reads its rules and indicators from `signature-base/`. Those signatures are **not bundled** in this repository. The updater retrieves them from the upstream [signature-base](https://github.com/Neo23x0/signature-base) and [ReversingLabs YARA rules](https://github.com/reversinglabs/reversinglabs-yara-rules) repositories. It keeps a per-source list of installed files and hashes so a missing or changed local rule is refreshed. Review third-party rules before use in a sensitive environment.
+The scanner reads its rules and indicators from `signature-base/`. Those signatures are **not bundled** in this repository. The updater retrieves them from [signature-base](https://github.com/Neo23x0/signature-base) and [ReversingLabs YARA rules](https://github.com/reversinglabs/reversinglabs-yara-rules). It keeps a per-source list of installed files and hashes so a missing or changed local rule is refreshed. Review third-party rules before use in a sensitive environment.
 
 ## Quick start
 
@@ -50,7 +50,7 @@ python asterscan.py --update --nolog
 python asterscan-updater.py --sigsonly
 ```
 
-`--update` and a plain `asterscan-updater.py` run update **signatures only**. The scanner waits for the updater and returns a nonzero status if it fails. Program self-update is opt-in via `asterscan-updater.py --progonly` and requires an AsterScan release; none is published yet. For source checkouts, use Git to update program files. This prevents an ordinary signature refresh from replacing the rebranded files with upstream LOKI binaries.
+`--update` and a plain `asterscan-updater.py` run update **signatures only**. The scanner waits for the updater and returns a nonzero status if it fails. Program self-update is opt-in via `asterscan-updater.py --progonly` and requires an AsterScan release; none is published yet. For source checkouts, use Git to update program files. An ordinary signature refresh never replaces application files.
 
 The scanner reports notices, warnings, and alerts. Exit status `0` means the requested scan completed, including when it found indicators. Exit status `2` means it could not complete a scan or an update. A missing path, unreadable file, failed YARA match, or a run with no scan selected produces `SCAN INCOMPLETE`, never a clean result. A clean result means no configured indicator matched in the scope it could inspect; it is not proof that a system is free of malware. Review findings before taking action, and do not upload confidential samples to public analysis services.
 
@@ -71,7 +71,7 @@ The Windows PyInstaller specifications are `asterscan.spec`, `asterscan-updater.
 
 ## Credits and license
 
-Original scanner: **Florian Roth and LOKI contributors**. The retained Git history records upstream authorship. AsterScan branding, command names, documentation, and update defaults are fork changes. The project remains under the [GNU GPL v3 or later](LICENSE); third-party notices are retained in `docs/` and relevant source files. Historical upstream images are retained in `screens/` and `docs/upstream-assets/`; they do not depict this fork.
+Original scanner: **Florian Roth and LOKI contributors**. AsterScan modifies [LOKI](https://github.com/Neo23x0/Loki) (base commit [`7688421`](https://github.com/Neo23x0/Loki/commit/7688421a7094e95453802d97484f2a0b8694a664)); its branding, command names, desktop workspace, reports, documentation, and update behavior were changed in October 2026. The retained Git history records authorship. This is not an official Nextron Systems release or a new detection engine. The original Python scanner is [deprecated](https://github.com/Neo23x0/Loki#readme), and AsterScan has not had an independent security audit. The project remains under the [GNU GPL v3 or later](LICENSE); third-party notices are retained in `docs/` and relevant source files. Historical images in `screens/` and `docs/upstream-assets/` do not depict AsterScan.
 
 For an actively developed scanner from the original author, see [LOKI RS](https://github.com/Neo23x0/Loki-RS).
 

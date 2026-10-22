@@ -98,7 +98,7 @@ TEMPLATE = r'''<!doctype html>
     <section class="view" id="sourcesView" hidden><div id="sources"></div></section>
     <div class="export"><button type="button" id="download">Download JSON</button></div>
   </main>
-  <footer class="footer">AsterScan is derived from LOKI by Florian Roth and contributors. Matches are leads for investigation, not proof of compromise. This report stays on your device unless you share it; paths and findings may be sensitive.</footer>
+  <footer class="footer">AsterScan | GPL-3.0-or-later | Original scanner: Florian Roth and LOKI contributors. Matches are leads for investigation, not proof of compromise. This report stays on your device unless you share it; paths and findings may be sensitive.</footer>
 </div>
 <script>
 const report=__ASTER_DATA__;
