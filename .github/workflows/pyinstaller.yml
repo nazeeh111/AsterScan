@@ -32,8 +32,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'AsterScan startup failed' }
           & dist/asterscan-package/asterscan-updater.exe --help | Out-Null
           if ($LASTEXITCODE -ne 0) { throw 'Updater startup failed' }
-          & dist/asterscan-package/asterscan-studio.exe --version | Out-Null
-          if ($LASTEXITCODE -ne 0) { throw 'Studio startup failed' }
+          $studioVersion = Start-Process -FilePath (Resolve-Path dist/asterscan-package/asterscan-studio.exe) -ArgumentList '--version' -Wait -PassThru
+          if ($studioVersion.ExitCode -ne 0) { throw 'Studio version check failed' }
+          $studio = Start-Process -FilePath (Resolve-Path dist/asterscan-package/asterscan-studio.exe) -WorkingDirectory (Resolve-Path dist/asterscan-package) -PassThru
+          Start-Sleep -Seconds 2
+          $studio.Refresh()
+          if ($studio.HasExited) { throw "Studio closed during startup with exit code $($studio.ExitCode)" }
+          Stop-Process -Id $studio.Id -Force
           $fixture = Join-Path $env:RUNNER_TEMP 'asterscan-runtime-test'
           New-Item -ItemType Directory -Force "$fixture/signature-base/yara", "$fixture/signature-base/iocs", "$fixture/signature-base/misc", "$fixture/config", "$fixture/tools" | Out-Null
           Copy-Item dist/asterscan-package/*.exe $fixture/
