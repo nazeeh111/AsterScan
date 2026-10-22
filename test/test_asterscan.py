@@ -1,5 +1,7 @@
 import importlib.util
 import io
+import json
+import os
 import tempfile
 import unittest
 import zipfile
@@ -63,6 +65,33 @@ class AsterScanTests(unittest.TestCase):
                 self.assertFalse(updater.update_signatures(clean=True))
             self.assertEqual((sig_dir / "known-good.yar").read_text(), "keep me")
             self.assertFalse((sig_dir / "yara" / "new.yar").exists())
+
+    def test_failed_download_does_not_mark_source_current(self):
+        with tempfile.TemporaryDirectory() as app_path:
+            previous_cwd = os.getcwd()
+            os.chdir(app_path)
+            try:
+                sig_url = "https://github.com/acme/rules/archive/main.zip"
+                commit_url = "https://api.github.com/repos/acme/rules/commits/main"
+                updater = updater_module.LOKIUpdater(False, QuietLogger(), app_path)
+                updater.UPDATE_URL_SIGS = [sig_url]
+                cache = Path(app_path) / "_acme_rules.cache"
+
+                def failed_download(url):
+                    return io.BytesIO(json.dumps({"sha": "abc"}).encode() if url == commit_url else b"bad ZIP")
+
+                with patch.object(updater_module, "urlopen", side_effect=failed_download):
+                    self.assertFalse(updater.update_signatures())
+                self.assertFalse(cache.exists())
+
+                def good_download(url):
+                    return io.BytesIO(json.dumps({"sha": "abc"}).encode() if url == commit_url else archive("rules/yara/new.yar", "rule"))
+
+                with patch.object(updater_module, "urlopen", side_effect=good_download):
+                    self.assertTrue(updater.update_signatures())
+                self.assertEqual(cache.read_text(), "abc")
+            finally:
+                os.chdir(previous_cwd)
 
 
 if __name__ == "__main__":

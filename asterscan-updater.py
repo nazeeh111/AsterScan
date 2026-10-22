@@ -53,19 +53,13 @@ def needs_update(sig_url):
         j = json.load(response_info)
         sha=j['sha']
         cache='_'.join(path)+'.cache'
-        changed=False
         if exists(cache):
             with open(cache, "r") as file:
                 old_sha = file.read().rstrip()
-            if sha != old_sha:
-                changed=True
-        else:
-            with open(cache, "w") as file:
-                file.write(sha)
-                changed=True
-        return changed
+            return sha != old_sha, cache, sha
+        return True, cache, sha
     except Exception:
-        return True
+        return True, None, None
 
 
 class LOKIUpdater(object):
@@ -89,9 +83,11 @@ class LOKIUpdater(object):
         sig_dir = os.path.join(self.application_path, 'signature-base')
         stage_root = None
         preserve_stage = False
+        pending_caches = []
         try:
             for sig_url in self.UPDATE_URL_SIGS:
-                if not (clean or needs_update(sig_url)):
+                changed, cache, sha = (True, None, None) if clean else needs_update(sig_url)
+                if not changed:
                     self.logger.log("INFO", "Upgrader", "%s is up to date." % sig_url)
                     continue
 
@@ -130,6 +126,8 @@ class LOKIUpdater(object):
                             self.logger.log("DEBUG", "Upgrader", "Extracting %s ..." % zip_path)
                             with zip_update.open(zip_path) as source, open(target_file, 'wb') as target:
                                 shutil.copyfileobj(source, target)
+                        if cache is not None:
+                            pending_caches.append((cache, sha))
 
             if stage_root is not None:
                 previous_dir = os.path.join(stage_root, 'previous')
@@ -145,6 +143,12 @@ class LOKIUpdater(object):
                             preserve_stage = True
                             self.logger.log("ERROR", "Upgrader", "Restore signatures manually from %s" % previous_dir)
                     raise
+                for cache, sha in pending_caches:
+                    try:
+                        with open(cache, 'w') as cache_file:
+                            cache_file.write(sha)
+                    except OSError:
+                        self.logger.log("NOTICE", "Upgrader", "Could not save the signature update cache: %s" % cache)
 
         except Exception:
             if self.debug:
