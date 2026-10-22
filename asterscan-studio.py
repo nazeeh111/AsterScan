@@ -71,7 +71,8 @@ class Studio(tk.Tk):
         style = ttk.Style(self)
         style.theme_use('clam')
         style.configure('Aster.Treeview', background=SURFACE, fieldbackground=SURFACE,
-                        foreground=TEXT, borderwidth=0, rowheight=36, font=('Helvetica', 11))
+                        foreground=TEXT, borderwidth=0, bordercolor=LINE,
+                        lightcolor=LINE, darkcolor=LINE, rowheight=36, font=('Helvetica', 11))
         style.map('Aster.Treeview', background=[('selected', SURFACE_2)],
                   foreground=[('selected', TEXT)])
         style.configure('Aster.Treeview.Heading', background=BG, foreground=MUTED,
@@ -82,15 +83,24 @@ class Studio(tk.Tk):
         style.configure('Aster.TCheckbutton', background=BG, foreground=TEXT,
                         font=('Helvetica', 11))
         style.map('Aster.TCheckbutton', background=[('active', BG)], foreground=[('disabled', MUTED)])
+        for name, background, foreground in (('Aster.TButton', SURFACE_2, TEXT),
+                                               ('Accent.Aster.TButton', LIME, BG)):
+            style.configure(name, background=background, foreground=foreground,
+                            bordercolor=LINE, lightcolor=background, darkcolor=background,
+                            focuscolor=LIME, borderwidth=1, relief='flat',
+                            font=('Helvetica', 11, 'bold'), padding=(14, 9))
+            style.map(name, background=[('disabled', SURFACE), ('pressed', LINE),
+                                        ('active', '#34463a' if foreground == TEXT else '#ebffa5')],
+                      foreground=[('disabled', MUTED)])
+        style.configure('Aster.Vertical.TScrollbar', background=SURFACE_2,
+                        troughcolor=SURFACE, arrowcolor=MUTED, bordercolor=LINE,
+                        lightcolor=SURFACE_2, darkcolor=SURFACE_2)
+        style.map('Aster.Vertical.TScrollbar', background=[('active', LINE)])
 
     def _button(self, parent, label, action, accent=False, compact=False):
-        button = tk.Button(parent, text=label, command=action, cursor='hand2', relief='flat',
-                           bd=0, highlightthickness=1, highlightbackground=LINE,
-                           bg=LIME if accent else SURFACE_2, fg=BG if accent else TEXT,
-                           activebackground='#ebffa5' if accent else '#34463a',
-                           activeforeground=BG if accent else TEXT,
-                           disabledforeground=MUTED, font=('Helvetica', 11, 'bold'),
-                           padx=12 if compact else 18, pady=7 if compact else 11)
+        button = ttk.Button(parent, text=label, command=action, cursor='hand2',
+                            style='Accent.Aster.TButton' if accent else 'Aster.TButton',
+                            padding=(12, 7) if compact else (18, 11))
         return button
 
     def _label(self, parent, text, color=MUTED, size=10, weight='normal'):
@@ -206,21 +216,22 @@ class Studio(tk.Tk):
         self.tree.tag_configure('WARNING', foreground=ORANGE)
         self.tree.tag_configure('NOTICE', foreground=LIME)
         self.tree.pack(side='left', fill='both', expand=True)
-        scroll = ttk.Scrollbar(list_frame, orient='vertical', command=self.tree.yview)
+        scroll = ttk.Scrollbar(list_frame, orient='vertical', command=self.tree.yview,
+                               style='Aster.Vertical.TScrollbar')
         scroll.pack(side='right', fill='y')
         self.tree.configure(yscrollcommand=scroll.set)
         self.tree.bind('<<TreeviewSelect>>', self._select_finding)
         self.findings_view.add(list_frame, minsize=330)
         detail_frame = tk.Frame(self.findings_view, bg=BG)
         self.detail = tk.Text(detail_frame, bg=BG, fg=TEXT, insertbackground=TEXT, wrap='word',
-                              relief='flat', bd=0, padx=17, pady=15, font=('Menlo', 10))
+                              relief='flat', bd=0, highlightthickness=0, padx=17, pady=15, font=('Menlo', 10))
         self.detail.pack(fill='both', expand=True)
         self.detail.tag_configure('heading', foreground=LIME, font=('Helvetica', 16, 'bold'))
         self.detail.tag_configure('muted', foreground=MUTED)
         self.detail.configure(state='disabled')
         self.findings_view.add(detail_frame, minsize=290)
         self.activity_view = tk.Text(content, bg=SURFACE, fg=TEXT, insertbackground=TEXT,
-                                     wrap='word', relief='flat', bd=0, padx=18, pady=14,
+                                     wrap='word', relief='flat', bd=0, highlightthickness=0, padx=18, pady=14,
                                      font=('Menlo', 10), state='disabled')
         for level, color in (('ALERT', RED), ('WARNING', ORANGE), ('NOTICE', LIME), ('ERROR', RED)):
             self.activity_view.tag_configure(level, foreground=color)
@@ -238,7 +249,7 @@ class Studio(tk.Tk):
     def _set_depth(self, depth):
         self.depth.set(depth)
         for button, active in ((self.fast_button, depth == 'Fast'), (self.deep_button, depth == 'Deep')):
-            button.configure(bg=LIME if active else SURFACE_2, fg=BG if active else TEXT)
+            button.configure(style='Accent.Aster.TButton' if active else 'Aster.TButton')
 
     def _show_tab(self, name):
         if name == 'findings':
@@ -247,10 +258,8 @@ class Studio(tk.Tk):
         else:
             self.findings_view.grid_forget()
             self.activity_view.grid(row=1, column=0, sticky='nsew', pady=(12, 0))
-        self.findings_tab.configure(bg=LIME if name == 'findings' else SURFACE_2,
-                                    fg=BG if name == 'findings' else TEXT)
-        self.activity_tab.configure(bg=LIME if name == 'activity' else SURFACE_2,
-                                    fg=BG if name == 'activity' else TEXT)
+        self.findings_tab.configure(style='Accent.Aster.TButton' if name == 'findings' else 'Aster.TButton')
+        self.activity_tab.configure(style='Accent.Aster.TButton' if name == 'activity' else 'Aster.TButton')
 
     def _refresh_actions(self):
         idle = self.process is None
