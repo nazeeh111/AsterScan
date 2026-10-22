@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">AsterScan mark</title>
+  <rect width="256" height="256" rx="36" fill="#102426"/>
+  <circle cx="128" cy="128" r="85" fill="none" stroke="#47756f" stroke-width="3"/>
+  <circle cx="128" cy="128" r="55" fill="none" stroke="#47756f" stroke-width="3"/>
+  <path d="M128 18v220M18 128h220" stroke="#47756f" stroke-width="3"/>
+  <path d="M128 53l17 58 58 17-58 17-17 58-17-58-58-17 58-17z" fill="#d5ea68"/>
+  <circle cx="128" cy="128" r="11" fill="#102426"/>
+</svg>

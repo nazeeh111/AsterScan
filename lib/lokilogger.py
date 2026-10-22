@@ -27,7 +27,7 @@ class LokiLogger:
     SYSLOG_LINE = 4
 
     no_log_file = False
-    log_file = "loki.log"
+    log_file = "asterscan.log"
     csv = False
     hostname = "NOTSET"
     alerts = 0
@@ -63,7 +63,7 @@ class LokiLogger:
         if remote_host:
             try:
                 # Create remote logger
-                self.remote_logger = logging.getLogger('LOKI')
+                self.remote_logger = logging.getLogger('AsterScan')
                 self.remote_logger.setLevel(logging.DEBUG)
                 socket_type = socket.SOCK_STREAM if syslog_tcp else socket.SOCK_DGRAM
                 remote_syslog_handler = rfc5424logging.Rfc5424SysLogHandler(address=(remote_host, remote_port),
@@ -162,7 +162,7 @@ class LokiLogger:
                 linebreaker = re.compile('(MD5:|SHA1:|SHA256:|MATCHES:|FILE:|FIRST_BYTES:|DESCRIPTION:|REASON_[0-9]+)', re.VERBOSE)
                 message = linebreaker.sub(r'\n\1', message)
                 # Colorize Key Words
-                colorer = re.compile('([A-Z_0-9]{2,}:)\s', re.VERBOSE)
+                colorer = re.compile(r'([A-Z_0-9]{2,}:)\s', re.VERBOSE)
                 message = colorer.sub(key_color+Style.BRIGHT+r'\1 '+base_color+Style.NORMAL, message)
 
                 # Print to console
@@ -186,7 +186,7 @@ class LokiLogger:
                 if self.csv:
                     logfile.write(self.Format(self.FILE_CSV, u"{0},{1},{2},{3},{4}{5}", getSyslogTimestamp(), self.hostname, mes_type, module, message, self.linesep))
                 else:
-                    logfile.write(self.Format(self.FILE_LINE, u"{0} {1} LOKI: {2}: MODULE: {3} MESSAGE: {4}{5}", getSyslogTimestamp(), self.hostname, mes_type.title(), module, message, self.linesep))
+                    logfile.write(self.Format(self.FILE_LINE, u"{0} {1} ASTERSCAN: {2}: MODULE: {3} MESSAGE: {4}{5}", getSyslogTimestamp(), self.hostname, mes_type.title(), module, message, self.linesep))
         except Exception:
             if self.debug:
                 traceback.print_exc()
@@ -195,7 +195,7 @@ class LokiLogger:
 
     def log_to_remotesys(self, message, mes_type, module):
         # Preparing the message
-        syslog_message = self.Format(self.SYSLOG_LINE, "LOKI: {0}: MODULE: {1} MESSAGE: {2}", mes_type.title(), module, message)
+        syslog_message = self.Format(self.SYSLOG_LINE, "ASTERSCAN: {0}: MODULE: {1} MESSAGE: {2}", mes_type.title(), module, message)
         try:
             # Mapping LOKI's levels to the syslog levels
             if mes_type == "NOTICE":
@@ -222,14 +222,11 @@ class LokiLogger:
             print(str(Back.WHITE))
             print(" ".ljust(79) + Back.BLACK + Style.BRIGHT)
 
-            print("      __   ____  __ ______  ")
-            print("     / /  / __ \\/ //_/  _/  ")
-            print("    / /__/ /_/ / ,< _/ /    ")
-            print("   /____/\\____/_/|_/___/    ")
-            print("   YARA and IOC Scanner     ")
+            print("   ASTERSCAN")
+            print("   IOC and YARA scanner")
             print("  ")
-            print("   by Florian Roth, GNU General Public License")
-            print("   version %s (Python 3 release)" % __version__)
+            print("   Derived from LOKI by Florian Roth | GPL-3.0-or-later")
+            print("   Upstream version %s | AsterScan fork" % __version__)
             print("  ")
             print("   DISCLAIMER - USE AT YOUR OWN RISK")
             print(str(Back.WHITE))
@@ -241,7 +238,7 @@ class LokiLogger:
             print(Back.GREEN + " ".ljust(79) + Back.BLACK + Fore.GREEN)
 
             print("  ")
-            print("  LOKI UPGRADER ")
+            print("  ASTERSCAN SIGNATURE UPDATER ")
 
             print("  ")
             print(Back.GREEN + " ".ljust(79) + Back.BLACK)

@@ -26,6 +26,8 @@ tools/*_flo.py
 loki\.log
 
 *.pyc
+.venv/
+__pycache__/
 signature-base
 tools/old-results
 build
@@ -34,3 +36,5 @@ rules
 rules.key
 *.htm
 loki.exe
+asterscan.exe
+asterscan-updater.exe

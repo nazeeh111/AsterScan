@@ -1,6 +1,6 @@
 # -*- mode: python -*-
 
-a = Analysis(['loki.py'],
+a = Analysis(['asterscan.py'],
              pathex=['.'],
              hiddenimports=[],
              hookspath=None,
@@ -14,8 +14,8 @@ exe = EXE(pyz,
           a.binaries,
           a.zipfiles,
           a.datas,
-          name='loki.exe',
+          name='asterscan.exe',
           debug=False,
           strip=None,
           upx=False,
-          console=True , icon='loki.ico')
+          console=True , icon='asterscan.ico')

@@ -73,7 +73,8 @@ def generateHashes(filedata):
 def getPlatformFull():
     type_info = ""
     try:
-        type_info = "%s PROC: %s ARCH: %s" % ( " ".join(platform.win32_ver()), platform.processor(), " ".join(platform.architecture()))
+        system_version = " ".join(platform.win32_ver()) if platform.system() == "Windows" else "%s %s" % (platform.system(), platform.release())
+        type_info = "%s PROC: %s ARCH: %s" % (system_version, platform.processor(), " ".join(platform.architecture()))
     except Exception:
         type_info = " ".join(platform.win32_ver())
     return type_info
@@ -197,15 +198,7 @@ def removeNonAscii(s, stripit=False):
 
 
 def removeNonAsciiDrop(s):
-    nonascii = "error"
-    try:
-        # Generate a new string without disturbing characters
-        printable = set(string.printable)
-        nonascii = filter(lambda x: x in printable, s)
-    except Exception:
-        traceback.print_exc()
-        pass
-    return nonascii
+    return ''.join(chr(byte) for byte in s if 32 <= byte <= 126)
 
 
 def getAge(filePath):

@@ -2,7 +2,7 @@
 # -*- coding: iso-8859-1 -*-
 # -*- coding: utf-8 -*-
 #
-#  LOKI Upgrader
+#  AsterScan signature updater (derived from LOKI Upgrader)
 try:
  from urllib2 import urlopen
 except ImportError:
@@ -10,6 +10,7 @@ except ImportError:
 import json
 import zipfile
 import shutil
+import tempfile
 import io
 import os
 import argparse
@@ -77,7 +78,7 @@ class LOKIUpdater(object):
         "https://github.com/reversinglabs/reversinglabs-yara-rules/archive/develop.zip"
     ]
     
-    UPDATE_URL_LOKI = "https://api.github.com/repos/Neo23x0/Loki/releases/latest"
+    UPDATE_URL_LOKI = "https://api.github.com/repos/nazeeh111/AsterScan/releases/latest"
     
     def __init__(self, debug, logger, application_path):
         self.debug = debug
@@ -85,89 +86,74 @@ class LOKIUpdater(object):
         self.application_path = application_path
 
     def update_signatures(self, clean=False):
+        sig_dir = os.path.join(self.application_path, 'signature-base')
+        stage_root = None
+        preserve_stage = False
         try:
             for sig_url in self.UPDATE_URL_SIGS:
-                if needs_update(sig_url):
-                    # Downloading current repository
-                    try:
-                        self.logger.log("INFO", "Upgrader", "Downloading %s ..." % sig_url)
-                        response = urlopen(sig_url)
-                    except Exception:
-                        if self.debug:
-                            traceback.print_exc()
-                        self.logger.log("ERROR", "Upgrader", "Error downloading the signature database - "
-                                                            "check your Internet connection")
-                        sys.exit(1)
+                if not (clean or needs_update(sig_url)):
+                    self.logger.log("INFO", "Upgrader", "%s is up to date." % sig_url)
+                    continue
 
-                    # Preparations
-                    try:
-                        sigDir = os.path.join(self.application_path, os.path.abspath('signature-base/'))
-                        if clean:
-                            self.logger.log("INFO", "Upgrader", "Cleaning directory '%s'" % sigDir)
-                            shutil.rmtree(sigDir)
-                        for outDir in ['', 'iocs', 'yara', 'misc']:
-                            fullOutDir = os.path.join(sigDir, outDir)
-                            if not os.path.exists(fullOutDir):
-                                os.makedirs(fullOutDir)
-                    except Exception:
-                        if self.debug:
-                            traceback.print_exc()
-                        self.logger.log("ERROR", "Upgrader", "Error while creating the signature-base directories")
-                        sys.exit(1)
+                self.logger.log("INFO", "Upgrader", "Downloading %s ..." % sig_url)
+                with urlopen(sig_url) as response:
+                    with zipfile.ZipFile(io.BytesIO(response.read())) as zip_update:
+                        bad_member = zip_update.testzip()
+                        if bad_member:
+                            raise zipfile.BadZipFile("Corrupt signature archive member: %s" % bad_member)
 
-                    # Read ZIP file
-                    try:
-                        zipUpdate = zipfile.ZipFile(io.BytesIO(response.read()))
-                        for zipFilePath in zipUpdate.namelist():
-                            sigName = os.path.basename(zipFilePath)
-                            if zipFilePath.endswith("/"):
+                        if stage_root is None:
+                            stage_root = tempfile.mkdtemp(prefix='.asterscan-signatures-', dir=self.application_path)
+                            staged_dir = os.path.join(stage_root, 'signature-base')
+                            if os.path.isdir(sig_dir) and not clean:
+                                shutil.copytree(sig_dir, staged_dir)
+                            else:
+                                os.makedirs(staged_dir)
+                            for out_dir in ('iocs', 'yara', 'misc'):
+                                os.makedirs(os.path.join(staged_dir, out_dir), exist_ok=True)
+
+                        for zip_path in zip_update.namelist():
+                            sig_name = os.path.basename(zip_path)
+                            if zip_path.endswith('/') or any(sig_name.endswith(rule) for rule in self.INCOMPATIBLE_RULES):
                                 continue
-                            # Skip incompatible rules
-                            skip = False
-                            for incompatible_rule in self.INCOMPATIBLE_RULES:
-                                if sigName.endswith(incompatible_rule):
-                                    self.logger.log("NOTICE", "Upgrader", "Skipping incompatible rule %s" % sigName)
-                                    skip = True
-                            if skip:
-                                continue
-                            # Extract the rules
-                            self.logger.log("DEBUG", "Upgrader", "Extracting %s ..." % zipFilePath)
-                            if "/iocs/" in zipFilePath and zipFilePath.endswith(".txt"):
-                                targetFile = os.path.join(sigDir, "iocs", sigName)
-                            elif "/yara/" in zipFilePath and zipFilePath.endswith(".yar"):
-                                targetFile = os.path.join(sigDir, "yara", sigName)
-                            elif "/misc/" in zipFilePath and zipFilePath.endswith(".txt"):
-                                targetFile = os.path.join(sigDir, "misc", sigName)
-                            elif zipFilePath.endswith(".yara"):
-                                targetFile = os.path.join(sigDir, "yara", sigName)
+                            if '/iocs/' in zip_path and zip_path.endswith('.txt'):
+                                target_dir = 'iocs'
+                            elif '/yara/' in zip_path and zip_path.endswith('.yar'):
+                                target_dir = 'yara'
+                            elif '/misc/' in zip_path and zip_path.endswith('.txt'):
+                                target_dir = 'misc'
+                            elif zip_path.endswith('.yara'):
+                                target_dir = 'yara'
                             else:
                                 continue
-
-                            # New file
-                            if not os.path.exists(targetFile):
-                                self.logger.log("INFO", "Upgrader", "New signature file: %s" % sigName)
-
-                            # Extract file
-                            source = zipUpdate.open(zipFilePath)
-                            target = open(targetFile, "wb")
-                            with source, target:
+                            target_file = os.path.join(staged_dir, target_dir, sig_name)
+                            self.logger.log("DEBUG", "Upgrader", "Extracting %s ..." % zip_path)
+                            with zip_update.open(zip_path) as source, open(target_file, 'wb') as target:
                                 shutil.copyfileobj(source, target)
-                            target.close()
-                            source.close()
 
-                    except Exception:
-                        if self.debug:
-                            traceback.print_exc()
-                        self.logger.log("ERROR", "Upgrader", "Error while extracting the signature files from the download "
-                                                            "package")
-                        sys.exit(1)
-                else:
-                    self.logger.log("INFO", "Upgrader", "%s is up to date." % sig_url)
+            if stage_root is not None:
+                previous_dir = os.path.join(stage_root, 'previous')
+                if os.path.exists(sig_dir):
+                    os.replace(sig_dir, previous_dir)
+                try:
+                    os.replace(staged_dir, sig_dir)
+                except Exception:
+                    if os.path.exists(previous_dir):
+                        try:
+                            os.replace(previous_dir, sig_dir)
+                        except Exception:
+                            preserve_stage = True
+                            self.logger.log("ERROR", "Upgrader", "Restore signatures manually from %s" % previous_dir)
+                    raise
 
         except Exception:
             if self.debug:
                 traceback.print_exc()
+            self.logger.log("ERROR", "Upgrader", "Signature update failed; existing signatures were kept")
             return False
+        finally:
+            if stage_root is not None and not preserve_stage:
+                shutil.rmtree(stage_root, ignore_errors=True)
         return True
 
 
@@ -186,18 +172,23 @@ class LOKIUpdater(object):
             except Exception:
                 if self.debug:
                     traceback.print_exc()
-                self.logger.log("ERROR", "Upgrader", "Error downloading the loki update - check your Internet connection")
+                self.logger.log("ERROR", "Upgrader", "Error downloading the AsterScan release - check the release and Internet connection")
                 sys.exit(1)
 
             # Read ZIP file
             try:
                 zipUpdate = zipfile.ZipFile(io.BytesIO(response_zip.read()))
                 for zipFilePath in zipUpdate.namelist():
-                    if zipFilePath.endswith("/") or "/config/" in zipFilePath or "/loki-upgrader.exe" in zipFilePath:
+                    if zipFilePath.endswith("/") or "/config/" in zipFilePath or "/asterscan-updater.exe" in zipFilePath:
                         continue
 
                     source = zipUpdate.open(zipFilePath)
-                    targetFile = "/".join(zipFilePath.split("/")[1:])
+                    parts = zipFilePath.split("/")[1:]
+                    if not parts:
+                        continue
+                    targetFile = os.path.abspath(os.path.join(self.application_path, *parts))
+                    if os.path.commonpath([self.application_path, targetFile]) != self.application_path:
+                        raise ValueError("Release archive contains a path outside the application directory")
 
                     self.logger.log("INFO", "Upgrader", "Extracting %s ..." %targetFile)
 
@@ -259,10 +250,10 @@ def get_application_path():
 if __name__ == '__main__':
 
     # Parse Arguments
-    parser = argparse.ArgumentParser(description='Loki - Upgrader')
-    parser.add_argument('-l', help='Log file', metavar='log-file', default='loki-upgrade.log')
-    parser.add_argument('--sigsonly', action='store_true', help='Update the signatures only', default=False)
-    parser.add_argument('--progonly', action='store_true', help='Update the program files only', default=False)
+    parser = argparse.ArgumentParser(description='AsterScan - Signature Updater')
+    parser.add_argument('-l', help='Log file', metavar='log-file', default='asterscan-update.log')
+    parser.add_argument('--sigsonly', action='store_true', help='Update signatures (the default)', default=False)
+    parser.add_argument('--progonly', action='store_true', help='Update program files from an AsterScan release', default=False)
     parser.add_argument('--nolog', action='store_true', help='Don\'t write a local log file', default=False)
     parser.add_argument('--debug', action='store_true', default=False, help='Debug output')
     parser.add_argument('--clean', action='store_true', default=False, help='Clean up the signature directory and get '
@@ -270,6 +261,8 @@ if __name__ == '__main__':
     parser.add_argument('--detached', action='store_true', default=False, help=argparse.SUPPRESS)
 
     args = parser.parse_args()
+    if args.sigsonly and args.progonly:
+        parser.error('--sigsonly and --progonly cannot be used together')
 
     # Computername
     if platform == "windows":
@@ -280,15 +273,16 @@ if __name__ == '__main__':
     # Logger
     logger = LokiLogger(args.nolog, args.l, t_hostname, '', '', False, False, False, args.debug, platform=platform, caller='upgrader')
 
-    # Update LOKI
+    # Update AsterScan
     updater = LOKIUpdater(args.debug, logger, get_application_path())
 
-    if not args.sigsonly:
-        logger.log("INFO", "Upgrader", "Updating LOKI ...")
+    if args.progonly:
+        logger.log("INFO", "Upgrader", "Updating AsterScan ...")
         updater.update_loki()
-    if not args.progonly:
+    else:
         logger.log("INFO", "Upgrader", "Updating Signatures ...")
-        updater.update_signatures(args.clean)
+        if not updater.update_signatures(args.clean):
+            sys.exit(1)
 
     logger.log("INFO", "Upgrader", "Update complete")
 

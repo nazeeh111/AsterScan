@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Loki WMI Scanner plugin
+AsterScan WMI scanner plugin (derived from LOKI)
 2018/04/20
 2018/04/21
 Author: @DidierStevens
@@ -11,7 +11,7 @@ import hashlib
 import sys
 
 def ScanWMI():
-    global logger  # logger is defined in loki.py.__main__
+    global logger  # logger is defined in asterscan.py.__main__
 
     if sys.platform in ("win32", "cygwin"):
         try:

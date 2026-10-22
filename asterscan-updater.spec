@@ -1,6 +1,6 @@
 # -*- mode: python -*-
 
-a = Analysis(['loki-upgrader.py'],
+a = Analysis(['asterscan-updater.py'],
              pathex=['.'],
              hiddenimports=[],
              hookspath=None,
@@ -14,8 +14,8 @@ exe = EXE(pyz,
           a.binaries,
           a.zipfiles,
           a.datas,
-          name='loki-upgrader.exe',
+          name='asterscan-updater.exe',
           debug=False,
           strip=None,
           upx=False,
-          console=True , icon='loki.ico')
+          console=True , icon='asterscan.ico')

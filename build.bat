@@ -1,40 +1,54 @@
 @ECHO OFF
-REM Building LOKI
+REM Build AsterScan from source
 
 setlocal enabledelayedexpansion
 
-SET PACKAGE=%CD%\loki
-SET DIST=%CD%\dist
+SET PACKAGE=%CD%\asterscan-package
 SET PYI=pyinstaller
 
-:: Cleaning all old versions
-RMDIR /S /Q build
-
-:: BUILD LOKI
-ECHO Compiling LOKI ...
-%PYI% loki.spec
+IF EXIST "%PACKAGE%" (
+    ECHO Package directory already exists: %PACKAGE%
+    exit /b 1
+)
+ECHO Compiling AsterScan ...
+%PYI% asterscan.spec
 if !errorlevel! neq 0 GOTO ERROR
-ECHO Compiling LOKI UPGRADER ...
-%PYI% loki-upgrader.spec
+ECHO Compiling AsterScan updater ...
+%PYI% asterscan-updater.spec
 if !errorlevel! neq 0 GOTO ERROR
 
 :: Copy Executables and other files to the package folder
-move .\dist\loki.exe %PACKAGE%\
-move .\dist\loki-upgrader.exe %PACKAGE%\
-mkdir %PACKAGE%\tools
-copy .\tools\pe-sieve32.exe %PACKAGE%\tools
-copy .\tools\pe-sieve64.exe %PACKAGE%\tools
+mkdir "%PACKAGE%"
+if !errorlevel! neq 0 GOTO ERROR
+copy /Y ".\dist\asterscan.exe" "%PACKAGE%\"
+if !errorlevel! neq 0 GOTO ERROR
+copy /Y ".\dist\asterscan-updater.exe" "%PACKAGE%\"
+if !errorlevel! neq 0 GOTO ERROR
+mkdir "%PACKAGE%\tools"
+if !errorlevel! neq 0 GOTO ERROR
+copy /Y ".\tools\pe-sieve32.exe" "%PACKAGE%\tools\"
+if !errorlevel! neq 0 GOTO ERROR
+copy /Y ".\tools\pe-sieve64.exe" "%PACKAGE%\tools\"
+if !errorlevel! neq 0 GOTO ERROR
+copy /Y ".\LICENSE" "%PACKAGE%\"
+if !errorlevel! neq 0 GOTO ERROR
+copy /Y ".\README.md" "%PACKAGE%\"
+if !errorlevel! neq 0 GOTO ERROR
+xcopy ".\config" "%PACKAGE%\config\" /E /I /Y >NUL
+if !errorlevel! neq 0 GOTO ERROR
+xcopy ".\docs" "%PACKAGE%\docs\" /E /I /Y >NUL
+if !errorlevel! neq 0 GOTO ERROR
+mkdir "%PACKAGE%\.github"
+if !errorlevel! neq 0 GOTO ERROR
+xcopy ".\.github\assets" "%PACKAGE%\.github\assets\" /E /I /Y >NUL
+if !errorlevel! neq 0 GOTO ERROR
 
-:: Delete files
-REM DEL /Q %PACKAGE%\signature-base
-DEL /Q %PACKAGE%\*.log
-DEL /Q %DIST%\loki_%VER%.zip
-IF EXIST %PACKAGE%\signature-base (
-    rmdir %PACKAGE%\signature-base /s /q
-)
+ECHO Build complete: %PACKAGE%
+GOTO END
 
 :ERROR
 ECHO An error occurred. Build interrupted.
+exit /b 1
 
 :END
 

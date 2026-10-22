@@ -70,7 +70,7 @@ if os_platform == "windows":
         os_platform = "linux"  # crazy guess
 
 if os_platform == "":
-    print("Unable to determine platform - LOKI is lost.")
+    print("Unable to determine platform for AsterScan.")
     sys.exit(1)
 
 # Predefined Evil Extensions
@@ -579,7 +579,7 @@ class Loki(object):
                 owner.upper().startswith(u"SERVICE RÉSEAU") or
                 re.match(r"SERVICE R.SEAU", owner) or
                 owner == u"Système"  or
-                owner.upper().startswith(u"AUTORITE NT\Système") or
+                owner.upper().startswith(r"AUTORITE NT\Système") or
                 re.match(r"AUTORITE NT\\Syst.me", owner))
         elif locale == 'ru_RU':
             return (owner.upper().startswith("NET") or
@@ -658,7 +658,7 @@ class Loki(object):
 
             # Skip own process ----------------------------------------------------
             if loki_pid == pid or loki_ppid == pid:
-                logger.log("INFO", "ProcessScan", "Skipping LOKI Process %s" % process_info)
+                logger.log("INFO", "ProcessScan", "Skipping AsterScan Process %s" % process_info)
                 continue
 
             # Print info ----------------------------------------------------------
@@ -1421,16 +1421,17 @@ def updateLoki(sigsOnly):
     pArgs = []
 
     # Updater
-    if os.path.exists(os.path.join(get_application_path(), 'loki-upgrader.exe')) and os_platform == "windows":
-        pArgs.append('loki-upgrader.exe')
-    elif os.path.exists(os.path.join(get_application_path(), 'loki-upgrader.py')):
+    if os.path.exists(os.path.join(get_application_path(), 'asterscan-updater.exe')) and os_platform == "windows":
+        pArgs.append(os.path.join(get_application_path(), 'asterscan-updater.exe'))
+    elif os.path.exists(os.path.join(get_application_path(), 'asterscan-updater.py')):
         pArgs.append(args.python)
-        pArgs.append('loki-upgrader.py')
+        pArgs.append(os.path.join(get_application_path(), 'asterscan-updater.py'))
     else:
-        logger.log("ERROR", "Update", "Cannot find neither thor-upgrader.exe nor thor-upgrader.py in the current working directory.")
+        logger.log("ERROR", "Update", "Cannot find the AsterScan updater in the application directory.")
+        return
 
+    pArgs.append('--sigsonly')
     if sigsOnly:
-        pArgs.append('--sigsonly')
         p = Popen(pArgs, shell=False)
         p.communicate()
     else:
@@ -1448,9 +1449,9 @@ def walk_error(err):
 def signal_handler(signal_name, frame):
     try:
         print("------------------------------------------------------------------------------\n")
-        logger.log('INFO', 'Init', 'LOKI\'s work has been interrupted by a human. Returning to Asgard.')
+        logger.log('INFO', 'Init', 'AsterScan was interrupted by the user.')
     except Exception:
-        print('LOKI\'s work has been interrupted by a human. Returning to Asgard.')
+        print('AsterScan was interrupted by the user.')
     sys.exit(0)
 
 def main():
@@ -1460,7 +1461,7 @@ def main():
     """
 
     # Parse Arguments
-    parser = argparse.ArgumentParser(description='Loki - Simple IOC Scanner')
+    parser = argparse.ArgumentParser(description='AsterScan - IOC and YARA scanner')
     parser.add_argument('-p', help='Path to scan', metavar='path', default='C:\\')
     parser.add_argument('-s', help='Maximum file size to check in KB (default 5000 KB)', metavar='kilobyte', default=5000)
     parser.add_argument('-l', help='Log file', metavar='log-file', default='')
@@ -1492,12 +1493,12 @@ def main():
     parser.add_argument('--logfolder', help='Folder to use for logging when log file is not specified', metavar='log-folder', default='')
     parser.add_argument('--nopesieve', action='store_true', help='Do not perform pe-sieve scans', default=False)
     parser.add_argument('--pesieveshellc', action='store_true', help='Perform pe-sieve shellcode scan', default=False)
-    parser.add_argument('--python', action='store', help='Override default python path', default='python')
+    parser.add_argument('--python', action='store', help='Override the Python interpreter used for signature updates', default=sys.executable)
     parser.add_argument('--nolisten', action='store_true', help='Dot not show listening connections', default=False)
     parser.add_argument('--excludeprocess', action='append', help='Specify an executable name to exclude from scans, can be used multiple times', default=[])
     parser.add_argument('--force', action='store_true',
-                        help='Force the scan on a certain folder (even if excluded with hard exclude in LOKI\'s code', default=False)
-    parser.add_argument('--version', action='store_true', help='Shows welcome text and version of loki, then exit', default=False)
+                        help='Force the scan on a certain folder (even if excluded in AsterScan)', default=False)
+    parser.add_argument('--version', action='store_true', help='Show AsterScan version and exit', default=False)
 
     args = parser.parse_args()
 
@@ -1509,7 +1510,7 @@ def main():
         print('The --logfolder and -l directives are not compatible with --nolog')
         sys.exit(1)
 		
-    filename = 'loki_%s_%s.log' % (getHostname(os_platform), datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+    filename = 'asterscan_%s_%s.log' % (getHostname(os_platform), datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
     if args.logfolder and args.l:
         print('Must specify either log folder with --logfolder, which uses the default filename, or log file with -l. Log file can be an absolute path')
         sys.exit(1)
@@ -1554,7 +1555,7 @@ if __name__ == '__main__':
         updateLoki(sigsOnly=False)
         sys.exit(0)
 
-    logger.log("NOTICE", "Init", "Starting Loki Scan VERSION: {3} SYSTEM: {0} TIME: {1} PLATFORM: {2}".format(
+    logger.log("NOTICE", "Init", "Starting AsterScan VERSION: {3} SYSTEM: {0} TIME: {1} PLATFORM: {2}".format(
         getHostname(os_platform), getSyslogTimestamp(), getPlatformFull(), logger.version))
 
     # Loki
@@ -1573,7 +1574,7 @@ if __name__ == '__main__':
             isAdmin = True
             logger.log("INFO", "Init", "Current user is root - very good")
         else:
-            logger.log("NOTICE", "Init", "Program should be run as 'root' to ensure all access rights to process memory and file objects.")
+            logger.log("NOTICE", "Init", "Running without root; protected files may not be readable.")
 
     # Set process to nice priority ------------------------------------
     if os_platform == "windows":
@@ -1627,15 +1628,14 @@ if __name__ == '__main__':
     logger.log("NOTICE", "Results", "Results: {0} alerts, {1} warnings, {2} notices".format(logger.alerts, logger.warnings, logger.notices))
     if logger.alerts:
         logger.log("RESULT", "Results", "Indicators detected!")
-        logger.log("RESULT", "Results", "Loki recommends checking the elements on virustotal.com or Google and triage with a "
-                             "professional tool like THOR https://nextron-systems.com/thor in corporate networks.")
+        logger.log("RESULT", "Results", "Review the matched indicators and confirm findings with trusted analysis tools.")
     elif logger.warnings:
         logger.log("RESULT", "Results", "Suspicious objects detected!")
-        logger.log("RESULT", "Results", "Loki recommends a deeper analysis of the suspicious objects.")
+        logger.log("RESULT", "Results", "AsterScan recommends a deeper analysis of the suspicious objects.")
     else:
         logger.log("RESULT", "Results", "SYSTEM SEEMS TO BE CLEAN.")
 
-    logger.log("INFO", "Results", "Please report false positives via https://github.com/Neo23x0/signature-base")
-    logger.log("NOTICE", "Results", "Finished LOKI Scan SYSTEM: %s TIME: %s" % (getHostname(os_platform), getSyslogTimestamp()))
+    logger.log("INFO", "Results", "Report signature false positives to the rule set's source repository.")
+    logger.log("NOTICE", "Results", "Finished AsterScan SYSTEM: %s TIME: %s" % (getHostname(os_platform), getSyslogTimestamp()))
 
 sys.exit(0)
