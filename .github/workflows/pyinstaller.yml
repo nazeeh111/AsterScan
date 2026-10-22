@@ -28,3 +28,4 @@ jobs:
         with:
           name: asterscan-windows
           path: dist/asterscan-package/
+          include-hidden-files: true
