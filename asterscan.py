@@ -65,9 +65,9 @@ if os_platform == "windows":
         import win32api
         from win32com.shell import shell
         import win32file
-    except Exception:
-        print("Linux System - deactivating process memory check ...")
-        os_platform = "linux"  # crazy guess
+    except ImportError as exc:
+        print("Windows scanner dependencies are missing: %s" % exc, file=sys.stderr)
+        sys.exit(2)
 
 if os_platform == "":
     print("Unable to determine platform for AsterScan.")
@@ -140,7 +140,9 @@ class Loki(object):
         if not os.path.exists(sig_dir) or os.listdir(sig_dir) == []:
             logger.log("NOTICE", "Init", "The 'signature-base' subdirectory doesn't exist or is empty. "
                                          "Trying to retrieve the signature database automatically.")
-            updateLoki(sigsOnly=True)
+            if not updateLoki(sigsOnly=True) or not os.path.isdir(sig_dir) or not os.listdir(sig_dir):
+                logger.log("ERROR", "Init", "Signatures are unavailable; scan cannot continue")
+                sys.exit(2)
 
         # Excludes
         self.initialize_excludes(os.path.join(self.app_path, "config/excludes.cfg".replace("/", os.sep)))
@@ -198,22 +200,28 @@ class Loki(object):
 
         # Check if path exists
         if not os.path.exists(path):
-            logger.log("ERROR", "FileScan", "None Existing Scanning Path %s ...  " % path)
-            return
+            logger.log("ERROR", "FileScan", "Scanning path does not exist: %s" % path)
+            return False
+        if not os.path.isdir(path) and not os.path.isfile(path):
+            logger.log("ERROR", "FileScan", "Scanning path is not a regular file or directory: %s" % path)
+            return False
+
+        explicit_file = os.path.isfile(path)
 
         # Startup
         logger.log("INFO", "FileScan", "Scanning Path %s ...  " % path)
         # Platform specific excludes
         for skip in self.startExcludes:
             if path.startswith(skip):
-                logger.log("INFO", "FileScan",
-                           "Skipping %s directory [fixed excludes] (try using --force, --allhds or --alldrives)" % skip)
-                return
+                logger.log("NOTICE", "FileScan",
+                           "Skipping %s path [fixed excludes] (try using --force, --allhds or --alldrives)" % skip)
+                return False
 
         # Counter
         c = 0
 
-        for root, directories, files in os.walk(path, onerror=walk_error, followlinks=False):
+        walk = [(os.path.dirname(path), [], [os.path.basename(path)])] if explicit_file else os.walk(path, onerror=walk_error, followlinks=False)
+        for root, directories, files in walk:
 
             # Skip paths that start with ..
             newDirectories = []
@@ -294,7 +302,7 @@ class Loki(object):
 
                     # Skip program directory
                     # print appPath.lower() +" - "+ filePath.lower()
-                    if self.app_path.lower() in filePath.lower():
+                    if not explicit_file and self.app_path.lower() in filePath.lower():
                         logger.log("DEBUG", "FileScan", "Skipping file in program directory FILE: %s" % filePathCleaned)
                         continue
 
@@ -329,8 +337,8 @@ class Loki(object):
                     try:
                         with open(filePath, 'rb') as f:
                             firstBytes = f.read(4)
-                    except Exception:
-                        logger.log("DEBUG", "FileScan", "Cannot open file %s (access denied)" % filePathCleaned)
+                    except Exception as exc:
+                        logger.log("ERROR", "FileScan", "Cannot open file %s: %s" % (filePath, exc))
 
                     # Evaluate Type
                     fileType = get_file_type(filePath, self.filetype_magics, self.max_filetype_magics, logger)
@@ -376,6 +384,8 @@ class Loki(object):
                     if do_intense_check:
 
                         fileData = self.get_file_data(filePath)
+                        if fileData is None:
+                            continue
 
                         # First bytes
                         firstBytesString = "%s / %s" % (fileData[:20].hex(), removeNonAsciiDrop(fileData[:20]))
@@ -491,10 +501,12 @@ class Loki(object):
 
                     logger.log(message_type, "FileScan", message_body)
 
-                except Exception:
+                except Exception as exc:
                     if logger.debug:
                         traceback.print_exc()
-                        sys.exit(1)
+                    logger.log("ERROR", "FileScan", "Could not scan %s: %s" % (filePath, exc))
+
+        return True
 
     def scan_data(self, fileData, fileType="-", fileName=b"-", filePath=b"-", extension=b"-", md5="-"):
 
@@ -554,6 +566,7 @@ class Loki(object):
         except Exception:
             if logger.debug:
                 traceback.print_exc()
+            logger.log("ERROR", "YaraScan", "YARA matching failed for %s" % filePath)
 
     def get_string_matches(self, strings):
         try:
@@ -1313,17 +1326,15 @@ class Loki(object):
 
 
     def get_file_data(self, filePath):
-        fileData = b''
         try:
             # Read file complete
             with open(filePath, 'rb') as f:
-                fileData = f.read()
-        except Exception:
+                return f.read()
+        except Exception as exc:
             if logger.debug:
                 traceback.print_exc()
-            logger.log("DEBUG", "FileScan", "Cannot open file %s (access denied)" % filePath)
-        finally:
-            return fileData
+            logger.log("ERROR", "FileScan", "Cannot read file %s: %s" % (filePath, exc))
+            return None
 
 
     def script_stats_analysis(self, data):
@@ -1417,7 +1428,7 @@ def processExists(pid):
 
 
 def updateLoki(sigsOnly):
-    logger.log("INFO", "Update", "Starting separate updater process ...")
+    logger.log("INFO", "Update", "Starting signature updater ...")
     pArgs = []
 
     # Updater
@@ -1428,21 +1439,23 @@ def updateLoki(sigsOnly):
         pArgs.append(os.path.join(get_application_path(), 'asterscan-updater.py'))
     else:
         logger.log("ERROR", "Update", "Cannot find the AsterScan updater in the application directory.")
-        return
+        return False
 
     pArgs.append('--sigsonly')
-    if sigsOnly:
+    if args.nolog:
+        pArgs.append('--nolog')
+    if args.debug:
+        pArgs.append('--debug')
+    try:
         p = Popen(pArgs, shell=False)
-        p.communicate()
-    else:
-        pArgs.append('--detached')
-        Popen(pArgs, shell=False)
+        return p.wait() == 0
+    except OSError as exc:
+        logger.log("ERROR", "Update", "Cannot start updater: %s" % exc)
+        return False
 
 
 def walk_error(err):
-    if "Error 3" in str(err):
-        logging.error(str(err))
-        print("Directory walk error")
+    logger.log("ERROR", "FileScan", "Directory walk error: %s" % err)
 
 
 # CTRL+C Handler --------------------------------------------------------------
@@ -1463,13 +1476,13 @@ def main():
     # Parse Arguments
     parser = argparse.ArgumentParser(description='AsterScan - IOC and YARA scanner')
     parser.add_argument('-p', help='Path to scan', metavar='path', default='C:\\')
-    parser.add_argument('-s', help='Maximum file size to check in KB (default 5000 KB)', metavar='kilobyte', default=5000)
+    parser.add_argument('-s', type=int, help='Maximum file size to check in KB (default 5000 KB)', metavar='kilobyte', default=5000)
     parser.add_argument('-l', help='Log file', metavar='log-file', default='')
     parser.add_argument('-r', help='Remote syslog system', metavar='remote-loghost', default='')
-    parser.add_argument('-t', help='Remote syslog port', metavar='remote-syslog-port', default=514)
-    parser.add_argument('-a', help='Alert score', metavar='alert-level', default=100)
-    parser.add_argument('-w', help='Warning score', metavar='warning-level', default=60)
-    parser.add_argument('-n', help='Notice score', metavar='notice-level', default=40)
+    parser.add_argument('-t', type=int, help='Remote syslog port', metavar='remote-syslog-port', default=514)
+    parser.add_argument('-a', type=int, help='Alert score', metavar='alert-level', default=100)
+    parser.add_argument('-w', type=int, help='Warning score', metavar='warning-level', default=60)
+    parser.add_argument('-n', type=int, help='Notice score', metavar='notice-level', default=40)
     parser.add_argument('--allhds', action='store_true', help='Scan all local hard drives (Windows only)', default=False)
     parser.add_argument('--alldrives', action='store_true', help='Scan all drives (including network drives and removable media)', default=False)
     parser.add_argument('--printall', action='store_true', help='Print all files that are scanned', default=False)
@@ -1501,6 +1514,9 @@ def main():
     parser.add_argument('--version', action='store_true', help='Show AsterScan version and exit', default=False)
 
     args = parser.parse_args()
+
+    if args.s <= 0 or not (0 <= args.n <= args.w <= args.a):
+        parser.error('file size must be positive and scores must satisfy 0 <= notice <= warning <= alert')
 
     if args.syslogtcp and not args.r:
         print('Syslog logging set to TCP with --syslogtcp, but syslog logging not enabled with -r')
@@ -1552,8 +1568,7 @@ if __name__ == '__main__':
 
     # Update
     if args.update:
-        updateLoki(sigsOnly=False)
-        sys.exit(0)
+        sys.exit(0 if updateLoki(sigsOnly=False) else 2)
 
     logger.log("NOTICE", "Init", "Starting AsterScan VERSION: {3} SYSTEM: {0} TIME: {1} PLATFORM: {2}".format(
         getHostname(os_platform), getSyslogTimestamp(), getPlatformFull(), logger.version))
@@ -1590,10 +1605,11 @@ if __name__ == '__main__':
         VChecker.run()
 
     # Scan Processes --------------------------------------------------
-    resultProc = False
+    scans_run = False
     if not args.noprocscan and os_platform == "windows":
         if isAdmin:
             loki.scan_processes(args.nopesieve, args.nolisten, args.excludeprocess, args.pesieveshellc)
+            scans_run = True
         else:
             logger.log("NOTICE", "Init", "Skipping process memory check. User has no admin rights.")
 
@@ -1612,21 +1628,24 @@ if __name__ == '__main__':
             if args.allhds:
                 for drive in drives:
                     if win32file.GetDriveType(drive) == win32file.DRIVE_FIXED:
-                        loki.scan_path(drive)
+                        scans_run = loki.scan_path(drive) or scans_run
             # All drives (including removable drives)
             elif args.alldrives:
                 for drive in drives:
-                    loki.scan_path(drive)
+                    scans_run = loki.scan_path(drive) or scans_run
             else:
-                loki.scan_path(defaultPath)
+                scans_run = loki.scan_path(defaultPath) or scans_run
 
         # Linux & macOS
         else:
-           loki.scan_path(defaultPath)
+           scans_run = loki.scan_path(defaultPath) or scans_run
 
     # Result ----------------------------------------------------------
     logger.log("NOTICE", "Results", "Results: {0} alerts, {1} warnings, {2} notices".format(logger.alerts, logger.warnings, logger.notices))
-    if logger.alerts:
+    if not scans_run or logger.errors:
+        reason = "no scan target was processed" if not scans_run else "%s errors occurred" % logger.errors
+        logger.log("RESULT", "Results", "SCAN INCOMPLETE: %s; review scan coverage before interpreting findings." % reason)
+    elif logger.alerts:
         logger.log("RESULT", "Results", "Indicators detected!")
         logger.log("RESULT", "Results", "Review the matched indicators and confirm findings with trusted analysis tools.")
     elif logger.warnings:
@@ -1638,4 +1657,4 @@ if __name__ == '__main__':
     logger.log("INFO", "Results", "Report signature false positives to the rule set's source repository.")
     logger.log("NOTICE", "Results", "Finished AsterScan SYSTEM: %s TIME: %s" % (getHostname(os_platform), getSyslogTimestamp()))
 
-sys.exit(0)
+    sys.exit(2 if not scans_run or logger.errors else 0)

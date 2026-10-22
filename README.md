@@ -13,7 +13,7 @@
 | YARA rules against files | Yes | Yes |
 | Process memory, connections, and Windows-specific checks | Yes, with the required privileges | No |
 
-The scanner reads its rules and indicators from `signature-base/`. Those signatures are **not bundled** in this repository. The updater retrieves them from the upstream [signature-base](https://github.com/Neo23x0/signature-base) and [ReversingLabs YARA rules](https://github.com/reversinglabs/reversinglabs-yara-rules) repositories. Review third-party rules before use in a sensitive environment.
+The scanner reads its rules and indicators from `signature-base/`. Those signatures are **not bundled** in this repository. The updater retrieves them from the upstream [signature-base](https://github.com/Neo23x0/signature-base) and [ReversingLabs YARA rules](https://github.com/reversinglabs/reversinglabs-yara-rules) repositories. It keeps a per-source list of installed files and hashes so a missing or changed local rule is refreshed. Review third-party rules before use in a sensitive environment.
 
 ## Quick start
 
@@ -44,9 +44,9 @@ python asterscan.py --update --nolog
 python asterscan-updater.py --sigsonly
 ```
 
-`--update` and a plain `asterscan-updater.py` run update **signatures only**. Program self-update is opt-in via `asterscan-updater.py --progonly` and requires an AsterScan release; none is published yet. For source checkouts, use Git to update program files. This prevents an ordinary signature refresh from replacing the rebranded files with upstream LOKI binaries.
+`--update` and a plain `asterscan-updater.py` run update **signatures only**. The scanner waits for the updater and returns a nonzero status if it fails. Program self-update is opt-in via `asterscan-updater.py --progonly` and requires an AsterScan release; none is published yet. For source checkouts, use Git to update program files. This prevents an ordinary signature refresh from replacing the rebranded files with upstream LOKI binaries.
 
-The scanner reports notices, warnings, and alerts. A clean result means no configured indicator matched in the scope it could inspect; it is not proof that a system is free of malware. Review findings before taking action, and do not upload confidential samples to public analysis services.
+The scanner reports notices, warnings, and alerts. Exit status `0` means the requested scan completed, including when it found indicators. Exit status `2` means it could not complete a scan or an update. A missing path, unreadable file, failed YARA match, or a run with no scan selected produces `SCAN INCOMPLETE`, never a clean result. A clean result means no configured indicator matched in the scope it could inspect; it is not proof that a system is free of malware. Review findings before taking action, and do not upload confidential samples to public analysis services.
 
 ## Rules and exclusions
 
@@ -59,10 +59,14 @@ The source has additional options for scan intensity, file-size limits, syslog, 
 
 ## Build and verify
 
-The Windows PyInstaller specifications are `asterscan.spec` and `asterscan-updater.spec`. They produce `asterscan.exe` and `asterscan-updater.exe` and use the AsterScan icon. The repository runs Python smoke checks on pushes and offers a manually triggered Windows binary build. A passing smoke check does not establish detection accuracy or full operating-system compatibility.
+The Windows PyInstaller specifications are `asterscan.spec` and `asterscan-updater.spec`. They produce `asterscan.exe` and `asterscan-updater.exe` and use the AsterScan icon. The repository runs Python smoke checks on pushes and offers a manually triggered Windows binary build. That build checks both EXEs start and runs an offline synthetic YARA detection; test signatures are not placed in the downloadable package. These checks do not establish detection accuracy or full operating-system compatibility.
 
 ## Credits and license
 
 Original scanner: **Florian Roth and LOKI contributors**. The retained Git history records upstream authorship. AsterScan branding, command names, documentation, and update defaults are fork changes. The project remains under the [GNU GPL v3 or later](LICENSE); third-party notices are retained in `docs/` and relevant source files. Historical upstream images are retained in `screens/` and `docs/upstream-assets/`; they do not depict this fork.
 
 For an actively developed scanner from the original author, see [LOKI RS](https://github.com/Neo23x0/Loki-RS).
+
+## Related projects
+
+See [Related projects](docs/RELATED_PROJECTS.md) for a dated comparison with LOKI RS, YARA Forge, Chainsaw, and capa, including what each tool covers and the license considerations for external rules.

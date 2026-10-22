@@ -15,6 +15,7 @@ import io
 import os
 import argparse
 import traceback
+import hashlib
 from sys import platform as _platform
 try:
     from urlparse import urlparse 
@@ -41,7 +42,12 @@ elif _platform == "darwin":
 elif _platform == "win32":
     platform = "windows"
 
-def needs_update(sig_url):
+def cache_path(sig_url, cache_dir):
+    path = urlparse(sig_url).path.split('/')[:-2]
+    return os.path.join(cache_dir, '_'.join(path) + '.cache')
+
+
+def needs_update(sig_url, cache_dir=None):
     try:
         o=urlparse(sig_url)
         path=o.path.split('/')
@@ -52,7 +58,7 @@ def needs_update(sig_url):
         response_info = urlopen(url)
         j = json.load(response_info)
         sha=j['sha']
-        cache='_'.join(path)+'.cache'
+        cache=cache_path(sig_url, cache_dir or os.getcwd())
         if exists(cache):
             with open(cache, "r") as file:
                 old_sha = file.read().rstrip()
@@ -79,14 +85,83 @@ class LOKIUpdater(object):
         self.logger = logger
         self.application_path = application_path
 
+    @staticmethod
+    def file_hash(path):
+        digest = hashlib.sha256()
+        with open(path, 'rb') as content:
+            for chunk in iter(lambda: content.read(1024 * 1024), b''):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    @staticmethod
+    def load_manifest(cache):
+        try:
+            with open(cache + '.manifest.json', 'r') as manifest_file:
+                manifest = json.load(manifest_file)
+            files = manifest['files']
+            if not isinstance(files, dict) or not files or not isinstance(manifest['sha'], str):
+                return None
+            for relative_path, digest in files.items():
+                parts = relative_path.split('/')
+                if len(parts) != 2 or parts[0] not in ('iocs', 'yara', 'misc') or not parts[1] or \
+                        parts[1] in ('.', '..') or '\\' in parts[1] or ':' in parts[1] or \
+                        not isinstance(digest, str) or len(digest) != 64 or \
+                        any(character not in '0123456789abcdef' for character in digest):
+                    return None
+            return manifest
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+
+    def manifest_matches(self, manifest, sha, sig_dir):
+        if manifest is None or manifest['sha'] != sha:
+            return False
+        try:
+            return all(self.file_hash(os.path.join(sig_dir, *relative_path.split('/'))) == digest
+                       for relative_path, digest in manifest['files'].items())
+        except OSError:
+            return False
+
+    def validate_yara_rules(self, staged_dir):
+        try:
+            import yara
+        except ImportError:
+            self.logger.log("NOTICE", "Upgrader", "yara-python unavailable; staged YARA rules were not compiled")
+            return
+
+        sources = []
+        for subdir in ('yara', os.path.join('iocs', 'yara'), '3rdparty'):
+            for root, _, files in os.walk(os.path.join(staged_dir, subdir)):
+                for name in sorted(files):
+                    if name.lower().endswith(('.yar', '.yara')) and not name.startswith(('.', '~', '_')):
+                        with open(os.path.join(root, name), 'r') as rule_file:
+                            sources.append(rule_file.read())
+        if sources:
+            yara.compile(source='\n'.join(sources), externals={
+                'filename': '', 'filepath': '', 'extension': '', 'filetype': '',
+                'md5': '', 'owner': '',
+            })
+
     def update_signatures(self, clean=False):
         sig_dir = os.path.join(self.application_path, 'signature-base')
         stage_root = None
         preserve_stage = False
         pending_caches = []
+        seen_targets = {}
         try:
+            sources = []
+            owners = {}
             for sig_url in self.UPDATE_URL_SIGS:
-                changed, cache, sha = (True, None, None) if clean else needs_update(sig_url)
+                changed, cache, sha = needs_update(sig_url, self.application_path)
+                old_manifest = self.load_manifest(cache_path(sig_url, self.application_path))
+                for relative_path in old_manifest['files'] if old_manifest else ():
+                    target_key = relative_path.casefold()
+                    if target_key in owners and owners[target_key] != sig_url:
+                        raise ValueError("Signature target owned by multiple sources: %s" % relative_path)
+                    owners[target_key] = sig_url
+                sources.append((sig_url, clean or changed or not self.manifest_matches(old_manifest, sha, sig_dir),
+                                cache, sha, old_manifest))
+
+            for sig_url, changed, cache, sha, old_manifest in sources:
                 if not changed:
                     self.logger.log("INFO", "Upgrader", "%s is up to date." % sig_url)
                     continue
@@ -108,6 +183,14 @@ class LOKIUpdater(object):
                             for out_dir in ('iocs', 'yara', 'misc'):
                                 os.makedirs(os.path.join(staged_dir, out_dir), exist_ok=True)
 
+                        if old_manifest:
+                            for relative_path in old_manifest['files']:
+                                old_file = os.path.join(staged_dir, *relative_path.split('/'))
+                                if os.path.isfile(old_file):
+                                    os.remove(old_file)
+
+                        accepted_count = 0
+                        new_files = {}
                         for zip_path in zip_update.namelist():
                             sig_name = os.path.basename(zip_path)
                             if zip_path.endswith('/') or any(sig_name.endswith(rule) for rule in self.INCOMPATIBLE_RULES):
@@ -122,14 +205,27 @@ class LOKIUpdater(object):
                                 target_dir = 'yara'
                             else:
                                 continue
+                            relative_path = target_dir + '/' + sig_name
+                            target_key = relative_path.casefold()
+                            if target_key in seen_targets:
+                                raise ValueError("Signature target collision: %s and %s" %
+                                                 (seen_targets[target_key], zip_path))
+                            if target_key in owners and owners[target_key] != sig_url:
+                                raise ValueError("Signature target collision with another source: %s" % relative_path)
+                            seen_targets[target_key] = zip_path
                             target_file = os.path.join(staged_dir, target_dir, sig_name)
                             self.logger.log("DEBUG", "Upgrader", "Extracting %s ..." % zip_path)
                             with zip_update.open(zip_path) as source, open(target_file, 'wb') as target:
                                 shutil.copyfileobj(source, target)
-                        if cache is not None:
-                            pending_caches.append((cache, sha))
+                            new_files[relative_path] = self.file_hash(target_file)
+                            accepted_count += 1
+                        if not accepted_count:
+                            raise ValueError("Signature archive contains no usable signature files: %s" % sig_url)
+                        if cache is not None and sha is not None:
+                            pending_caches.append((cache, sha, new_files))
 
             if stage_root is not None:
+                self.validate_yara_rules(staged_dir)
                 previous_dir = os.path.join(stage_root, 'previous')
                 if os.path.exists(sig_dir):
                     os.replace(sig_dir, previous_dir)
@@ -143,17 +239,19 @@ class LOKIUpdater(object):
                             preserve_stage = True
                             self.logger.log("ERROR", "Upgrader", "Restore signatures manually from %s" % previous_dir)
                     raise
-                for cache, sha in pending_caches:
+                for cache, sha, files in pending_caches:
                     try:
+                        with open(cache + '.manifest.json', 'w') as manifest_file:
+                            json.dump({'sha': sha, 'files': files}, manifest_file, sort_keys=True)
                         with open(cache, 'w') as cache_file:
                             cache_file.write(sha)
                     except OSError:
                         self.logger.log("NOTICE", "Upgrader", "Could not save the signature update cache: %s" % cache)
 
-        except Exception:
+        except Exception as error:
             if self.debug:
                 traceback.print_exc()
-            self.logger.log("ERROR", "Upgrader", "Signature update failed; existing signatures were kept")
+            self.logger.log("ERROR", "Upgrader", "Signature update failed; existing signatures were kept: %s" % error)
             return False
         finally:
             if stage_root is not None and not preserve_stage:

@@ -2,7 +2,7 @@
 
 a = Analysis(['asterscan-updater.py'],
              pathex=['.'],
-             hiddenimports=[],
+             hiddenimports=['yara'],
              hookspath=None,
              runtime_hooks=None)
 pyz = PYZ(a.pure)

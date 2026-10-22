@@ -24,6 +24,24 @@ jobs:
           New-Item -ItemType Directory -Force dist/asterscan-package/.github
           Copy-Item .github/assets dist/asterscan-package/.github/ -Recurse
         shell: pwsh
+      - run: |
+          & dist/asterscan-package/asterscan.exe --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'AsterScan help failed' }
+          & dist/asterscan-package/asterscan.exe --version --nolog | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'AsterScan startup failed' }
+          & dist/asterscan-package/asterscan-updater.exe --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Updater startup failed' }
+          $fixture = Join-Path $env:RUNNER_TEMP 'asterscan-runtime-test'
+          New-Item -ItemType Directory -Force "$fixture/signature-base/yara", "$fixture/signature-base/iocs", "$fixture/signature-base/misc", "$fixture/config", "$fixture/tools" | Out-Null
+          Copy-Item dist/asterscan-package/*.exe $fixture/
+          Copy-Item dist/asterscan-package/tools/*.exe "$fixture/tools/"
+          Copy-Item config/excludes.cfg "$fixture/config/"
+          Set-Content -Path "$fixture/signature-base/misc/file-type-signatures.txt" -Value ''
+          Set-Content -Path "$fixture/signature-base/yara/test.yar" -Value 'rule AsterWindowsTest { strings: $marker = "ASTERSCAN_WINDOWS_TEST" condition: $marker }'
+          Set-Content -Path "$fixture/target.txt" -Value 'ASTERSCAN_WINDOWS_TEST'
+          $scan = & "$fixture/asterscan.exe" --nolog --noindicator --noprocscan --intense -p "$fixture/target.txt" 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0 -or $scan -notmatch 'AsterWindowsTest' -or $scan -notmatch 'Suspicious objects detected') { throw "Windows fixture scan failed: $scan" }
+        shell: pwsh
       - uses: actions/upload-artifact@v4
         with:
           name: asterscan-windows

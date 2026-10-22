@@ -41,6 +41,11 @@ class LokiLogger:
 
     def __init__(self, no_log_file, log_file, hostname, remote_host, remote_port, syslog_tcp, csv, only_relevant, debug, platform, caller, customformatter=None):
         self.version = __version__
+        self.alerts = 0
+        self.warnings = 0
+        self.notices = 0
+        self.errors = 0
+        self.messagecount = 0
         self.no_log_file = no_log_file
         self.log_file = log_file
         self.hostname = hostname
@@ -87,10 +92,12 @@ class LokiLogger:
             self.warnings += 1
         if mes_type == "NOTICE":
             self.notices += 1
+        if mes_type == "ERROR":
+            self.errors += 1
         self.messagecount += 1
 
         if self.only_relevant:
-            if mes_type not in ('ALERT', 'WARNING'):
+            if mes_type not in ('ALERT', 'WARNING', 'ERROR') and not (mes_type == 'RESULT' and message.startswith('SCAN INCOMPLETE')):
                 return
 
         # to file

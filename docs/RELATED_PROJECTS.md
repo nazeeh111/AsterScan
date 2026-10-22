@@ -1,0 +1,19 @@
+# Related projects
+
+Checked against the linked project documentation and repositories on 2026-10-22. These tools solve different parts of incident response; the table is a scope guide, not a performance ranking.
+
+| Project | Role and current scope | License and maintenance |
+| --- | --- | --- |
+| [AsterScan](../README.md) | Python LOKI fork. Scans files with path/name indicators, hashes, and YARA on Windows, macOS, and Linux; Windows also has privileged process and connection checks. Offers text, CSV, and syslog output. No binary release or independent security audit yet. | [GPL-3.0-or-later](../LICENSE). Fork of upstream commit [`7688421`](https://github.com/Neo23x0/Loki/commit/7688421a7094e95453802d97484f2a0b8694a664); the original detection engine is retained. |
+| [LOKI RS](https://github.com/Neo23x0/Loki-RS) | Original author's Rust rewrite for file and process IOC/YARA scanning. Documents multithreading, ZIP scanning, JSONL and HTML reports, and a terminal interface. It uses YARA-X and describes itself as beta. | GPL-3.0; [release preparation for v2.13.1](https://github.com/Neo23x0/Loki-RS/commit/0866b3d0e32d82f8b5776f61c67b655a34a55b4a) on 2026-09-27. The former Loki2 URL redirects here. |
+| [YARA Forge](https://github.com/YARAHQ/yara-forge) | Rule collection and quality pipeline, not an endpoint scanner. Publishes Core, Extended, and Full rule packages. | Pipeline code is GPL-3.0; [2026-10-04 rules release](https://github.com/YARAHQ/yara-forge/releases). Aggregated rules have their own licenses and attribution requirements. |
+| [Chainsaw](https://github.com/WithSecureOpenSource/chainsaw) | Standalone Windows forensic artifact hunter: Event Logs, Sigma rules, timelines, and JSON/CSV results. Complements file scanning; it does not replace AsterScan's YARA/IOC checks. | GPL-3.0; [repository activity](https://github.com/WithSecureOpenSource/chainsaw/commits/master) observed in October 2026. |
+| [capa](https://github.com/mandiant/capa) | Analyzes executable files to explain capabilities such as networking or service installation. Useful for investigating a flagged file, not for broad endpoint scanning. | Apache-2.0; [repository activity](https://github.com/mandiant/capa/commits/master) observed in October 2026. |
+
+## What to improve here
+
+**Structured reporting** is the next practical bridge from a one-off scan to repeatable triage. A documented JSONL finding format could record the indicator or rule, affected object, scan scope, skipped files, and errors without parsing colored console text. CSV already exists; any new format should preserve the same detection results and keep rule authors visible in match messages.
+
+**Rule provenance** matters because a scan result depends on the exact rules loaded. AsterScan downloads signatures separately from its GPL code, including [Neo23x0/signature-base](https://github.com/Neo23x0/signature-base) and [ReversingLabs rules](https://github.com/reversinglabs/reversinglabs-yara-rules). The updater now records each source revision, installed file path, and SHA-256 hash, rejects duplicate signature targets, validates staged YARA when yara-python is installed, and rolls back a failed directory swap. A report that also carries those revisions and each rule's license would make findings easier to reproduce and attribute. The [signature-base Detection Rule License 1.1](https://github.com/Neo23x0/signature-base/blob/master/LICENSE) specifically requires supplied author attribution in messages based on rule matches. Validation independent of optional dependencies remains future work.
+
+YARA-X is a plausible future engine to evaluate, but its [documented rule differences](https://virustotal.github.io/yara-x/docs/writing_rules/differences-with-yara/) call for testing AsterScan's actual rules and results before a migration. Chainsaw and capa are more useful as companion workflows than as features to copy into this scanner.
