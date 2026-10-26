@@ -1,0 +1,13 @@
+AsterScan is a modified version of LOKI by Florian Roth and LOKI contributors.
+Upstream source: https://github.com/Neo23x0/Loki
+Base commit: 7688421a7094e95453802d97484f2a0b8694a664
+
+AsterScan modifications by nazeeh111, October 2026: workspace identity,
+command names, desktop workspace, reports, documentation, signature-update
+handling and helper simplifications. Original authorship is retained; this
+is not an official Nextron Systems release or a new detection engine.
+
+The program remains licensed under GPL-3.0-or-later; see LICENSE. Original
+source headers and third-party license files remain applicable. Rules are
+installed separately under their own licenses. Preserve any author notices
+required for matches by those rule licenses.

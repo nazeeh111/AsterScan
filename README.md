@@ -69,12 +69,6 @@ The source has additional options for scan intensity, file-size limits, syslog, 
 
 The Windows PyInstaller specifications are `asterscan.spec`, `asterscan-updater.spec`, and `asterscan-studio.spec`. They produce the scanner, updater, and Studio executables with the AsterScan icon. The repository runs Python smoke checks on pushes and offers a manually triggered Windows binary build. That build checks the executables start, runs an offline synthetic YARA detection, and generates an HTML report; test signatures are not placed in the downloadable package. These checks do not establish detection accuracy or full operating-system compatibility.
 
-## Credits and license
+## License and source
 
-Original scanner: **Florian Roth and LOKI contributors**. AsterScan modifies [LOKI](https://github.com/Neo23x0/Loki) (base commit [`7688421`](https://github.com/Neo23x0/Loki/commit/7688421a7094e95453802d97484f2a0b8694a664)); its branding, command names, desktop workspace, reports, documentation, and update behavior were changed in October 2026. The retained Git history records authorship. This is not an official Nextron Systems release or a new detection engine. The original Python scanner is [deprecated](https://github.com/Neo23x0/Loki#readme), and AsterScan has not had an independent security audit. The project remains under the [GNU GPL v3 or later](LICENSE); third-party notices are retained in `docs/` and relevant source files. Historical images in `screens/` and `docs/upstream-assets/` do not depict AsterScan.
-
-For an actively developed scanner from the original author, see [LOKI RS](https://github.com/Neo23x0/Loki-RS).
-
-## Related projects
-
-See [Related projects](docs/RELATED_PROJECTS.md) for a dated comparison with LOKI RS, YARA Forge, Chainsaw, and capa, including what each tool covers and the license considerations for external rules.
+AsterScan is licensed under [GNU GPL v3 or later](LICENSE). [NOTICE](NOTICE) records the retained scanner’s source and AsterScan modifications; third-party notices remain in `docs/` and their source files. Detection-rule licenses apply separately and may require author attribution with matches. Historical images in `screens/` and `docs/upstream-assets/` do not depict AsterScan. The detection engine has not had an independent security audit.

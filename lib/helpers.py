@@ -2,8 +2,8 @@
 # -*- coding: iso-8859-1 -*-
 # -*- coding: utf-8 -*-
 #
-#  Loki
-#  Simple IOC Scanner
+#  AsterScan IOC scanner helpers, derived from LOKI.
+#  Modified October 2026; see NOTICE.
 
 import sys
 import hashlib
@@ -27,11 +27,7 @@ import signal
 
 def is_ip(string):
     try:
-        if netaddr.valid_ipv4(string):
-            return True
-        if netaddr.valid_ipv6(string):
-            return True
-        return False
+        return netaddr.valid_ipv4(string) or netaddr.valid_ipv6(string)
     except:
         traceback.print_exc()
         return False
@@ -39,19 +35,14 @@ def is_ip(string):
 
 def is_cidr(string):
     try:
-        if netaddr.IPNetwork(string) and "/" in string:
-            return True
-        return False
+        return bool(netaddr.IPNetwork(string) and "/" in string)
     except:
         return False
 
 
 def ip_in_net(ip, network):
     try:
-        # print "Checking if ip %s is in network %s" % (ip, network)
-        if netaddr.IPAddress(ip) in netaddr.IPNetwork(network):
-            return True
-        return False
+        return netaddr.IPAddress(ip) in netaddr.IPNetwork(network)
     except:
         return False
 
