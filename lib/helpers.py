@@ -3,7 +3,7 @@
 # -*- coding: utf-8 -*-
 #
 #  AsterScan IOC scanner helpers, derived from LOKI.
-#  Modified October 2026; see NOTICE.
+#  Modified October 2026; see LICENSE.
 
 import sys
 import hashlib
