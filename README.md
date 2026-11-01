@@ -4,6 +4,8 @@
 
 **AsterScan** combines command-line IOC and YARA scanning with a local desktop workspace and offline investigation reports. It is GPL-licensed and runs without a cloud account.
 
+Built on [LOKI by Florian Roth and contributors](https://github.com/Neo23x0/Loki). AsterScan adds the desktop workspace, reports and update handling; [NOTICE](NOTICE) records the preserved source and modifications.
+
 ## What it scans
 
 | Check | Windows | macOS / Linux |
